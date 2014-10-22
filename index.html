@@ -14,8 +14,8 @@
 
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-		<link rel="stylesheet" href="css/reveal.min.css">
-		<link rel="stylesheet" href="css/theme/default.css" id="theme">
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/night.css" id="theme">
 
 		<!-- For syntax highlighting -->
 		<link rel="stylesheet" href="lib/css/zenburn.css">
@@ -34,6 +34,14 @@
 		<!--[if lt IE 9]>
 		<script src="lib/js/html5shiv.js"></script>
 		<![endif]-->
+
+		<style type="text/css">
+			.reveal pre code {
+				padding: 15px;
+				max-height: inherit;
+				word-wrap: inherit;
+			}
+		</style>
 	</head>
 
 	<body>
@@ -46,7 +54,7 @@
 					<h1>The Future?</h1>
 					<h3>node.js microservices on coreos</h3>
 					<p>
-						<small><a href="http://github.com/kenperkins">Ken Perkins</a> | <a href="http://twitter.com/kenperkins">@kenperkins</a></small>
+						<small><a href="http://github.com/kenperkins">Ken Perkins</a><br/>Node.js Developer Advocate @ Rackspace | <a href="http://twitter.com/kenperkins">@kenperkins</a></small>
 					</p>
 				</section>
 
@@ -59,7 +67,7 @@
 					<h2>A look to the past</h2>
 
 					<p>
-						Microsoft shuts down zoom.it, and it needs a new home
+						Microsoft shuts down <a href="http://zoom.it">zoom.it</a>, and it needs a new home
 					</p>
 				</section>
 
@@ -82,7 +90,7 @@
 					<h2>I got 5 million problems,<br/>but node aint one</h2>
 
 					<ul>
-						<li>top ~5k images resulted in<br />~4.2m image tiles to migrate
+						<li>top ~5k images resulted in<br /><span class="fragment highlight-red">~4.2m image tiles to migrate</span>
 					</ul>
 				</section>
 
@@ -94,6 +102,18 @@
 					</p>
 				</section>
 
+				<section>
+					<h2>Data migration problems</h2>
+
+					<ul>
+						<li>Identifying what to migrate</li>
+						<li>pause/resume</li>
+						<li>auto retry</li>
+						<li>capturing failed transfers</li>
+						<li>statistics (i.e. items/sec, etc)</li>
+						<li>...</li>
+					</ul>
+				</section>
 
 				<section>
 					<h2>Microservices Definition</h2>
@@ -115,35 +135,26 @@
 					<h2>What does that really mean?</h2>
 
 					<p>
-						Small, lightweight apps, designed to do a single task well
+						Small, lightweight apps, designed to <span class="fragment highlight-red">do a single task well</span>
 					</p>
 				</section>
 
 				<section>
-					<h2>zoomhub-importer</h2>
+					<h3>zoomhub-importer</h3>
 
 					<ul>
-						<li>Populate a Queue</li>
-						<li>Pipe image from azure to rackspace</li>
-						<li>upload a dzi</li>
-						<li>output stats</li>
-						<li>run redis*</li>
-					</ul>
-				</section>
-
-				<section>
-					<h2>This presents a problem</h2>
-
-					<ul>
-						<li>Populate a Queue</li>
-						<li>Pipe image from azure to rackspace</li>
-						<li>upload a dzi</li>
-						<li>output stats</li>
-						<li>run redis*</li>
+						<li>zh-populate</li>
+						<li>zh-import-blobs</li>
+						<li>zh-upload-dzis</li>
+						<li>zh-stats</li>
+						<li>redis*</li>
 					</ul>
 
-					<p>How do we now deploy, configure, and coordinate multiple apps?</p>
+					<p style="margin-top: 15px;" class="fragment">
+						<em>But how do we now <span class="fragment highlight-red">deploy, configure, and coordinate multiple apps?</span></em>
+					</p>
 				</section>
+
 
 				<section>
 					<h2>Enter Docker</h2>
@@ -152,15 +163,18 @@
 
 				</section>
 
-				<section>
-					<h2>Dockerfile</h2>
+				<section data-markdown>
+					<script type="text/template">
+						## Dockerflie
 
-					<pre>
+						```bash
 						FROM node:0.10
 						MAINTAINER Ken Perkins "ken.perkins@rackspace.com"
 						RUN npm install -g zoomhub-importer
 
-						CMD ["/usr/bin/node", "--version"]</pre>
+						CMD ["/usr/bin/node", "--version"]
+						```
+					</script>
 				</section>
 
 				<section>
@@ -178,192 +192,208 @@
 					<blockquote>fleet ties together systemd and etcd into a distributed init system</blockquote>
 				</section>
 
+				<section data-markdown>
+					<script type="text/template">
+						## Create our cluster
+
+						```bash
+						$ coreos-cluster-cli --num-nodes 10 --release beta
+							--flavor performance1-8 --key-name ken-mbp
+						```
+
+						<small><a href="https://npmjs.org/package/coreos-cluster-cli">https://npmjs.org/package/coreos-cluster-cli</a></small>
+					</script>
+				</section>
+
 				<section>
-					<h2>Create our cluster</h2>
+					<section>
+						<h2>Deploy Some Services</h2>
+
+						<p>
+							Redis, Populate, and Stats, plus the heavy lifters
+						</p>
+					</section>
+
+					<section>
+						<h2>5 Systemd services</h2>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## app-redis.service
+
+							```bash
+							[Unit]
+							Description=App Redis
+							After=docker.service
+							Requires=docker.service
+
+							[Service]
+							EnvironmentFile=/etc/environment
+
+							#Disable service timeout
+							TimeoutStartSec=0
+							Restart=always
+							ExecStartPre=-/usr/bin/docker kill %n
+							ExecStartPre=-/usr/bin/docker rm %n
+							ExecStartPre=/usr/bin/docker pull redis
+							ExecStart=/usr/bin/docker run --name %n -p ${COREOS_PRIVATE_IPV4}:6379:6379 redis:latest redis-server --requirepass foo-bar-biz-baz-buz
+							ExecStartPost=/bin/bash -c '\
+							while true; do \
+							/usr/bin/etcdctl set /services/app-redis ${COREOS_PRIVATE_IPV4}:6379 --ttl 10; \
+							sleep 5; \
+							done'
+							ExecStop=/usr/bin/etcdctl rm /services/app-redis
+							ExecStop=/usr/bin/docker stop %n
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## app-populate.service
+
+							```bash
+							[Unit]
+							Description=ZH Populate Service
+							Requires=docker.service
+							Requires=etcd.service
+
+							After=docker.service
+							After=etcd.service
+
+							[Service]
+							EnvironmentFile=/etc/environment
+							User=core
+
+							Restart=no
+							TimeoutStartSec=0
+							ExecStartPre=-/usr/bin/docker kill zh-populate
+							ExecStartPre=-/usr/bin/docker rm zh-populate
+							ExecStartPre=/usr/bin/docker pull kenperkins/zoomhub-importer
+							ExecStart=/usr/bin/docker run --name zh-populate \
+							-e RAX_USERNAME=zoomingservice \
+							-e RAX_PASSWORD=this-is-not-my-password \
+							-e RAX_REGION=IAD \
+							-e ZH_REDIS_PASSWORD=foo-bar-biz-baz-buz \
+							-e ZH_LOG_LEVEL=info \
+							kenperkins/zoomhub-importer /usr/bin/zh-populate-queue --useInternal --useEtcd
+							ExecStop=/usr/bin/docker stop zh-populate
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## app-stats.service
+
+							```bash
+							[Unit]
+							Description=ZH Stats Service
+
+							Requires=docker.service
+							Requires=etcd.service
+
+							After=docker.service
+							After=etcd.service
+
+							[Service]
+							EnvironmentFile=/etc/environment
+							User=core
+
+							Restart=always
+							TimeoutStartSec=0
+							ExecStartPre=-/usr/bin/docker kill zh-stats
+							ExecStartPre=-/usr/bin/docker rm zh-stats
+							ExecStartPre=/usr/bin/docker pull kenperkins/zoomhub-importer
+							ExecStart=/usr/bin/docker run --name zh-stats \
+							-e RAX_USERNAME=zoomingservice \
+							-e RAX_PASSWORD=this-is-not-my-password \
+							-e RAX_REGION=IAD \
+							-e ZH_REDIS_PASSWORD=foo-bar-biz-baz-buz \
+							-e ZH_LOG_LEVEL=info \
+							kenperkins/zoomhub-importer /usr/bin/zh-stats --useInternal --useEtcd
+							ExecStop=/usr/bin/docker stop zh-stats
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## app-importer@.service
+
+							```bash
+							[Unit]
+							Description=ZH Blob Importer Service
+
+							Requires=docker.service
+							Requires=etcd.service
+
+							After=docker.service
+							After=etcd.service
+
+							[Service]
+							EnvironmentFile=/etc/environment
+							User=core
+
+							Restart=always
+							TimeoutStartSec=0
+							ExecStartPre=-/usr/bin/docker kill %p-%i
+							ExecStartPre=-/usr/bin/docker rm %p-%i
+							ExecStartPre=/usr/bin/docker pull kenperkins/zoomhub-importer
+							ExecStart=/usr/bin/docker run --name %p-%i \
+							-e RAX_USERNAME=zoomingservice \
+							-e RAX_PASSWORD=this-is-not-my-password \
+							-e RAX_REGION=IAD \
+							-e ZH_REDIS_PASSWORD=foo-bar-biz-baz-buz \
+							-e ZH_LOG_LEVEL=info \
+							kenperkins/zoomhub-importer /usr/bin/zh-import-blobs --useInternal --useEtcd
+							ExecStop=/usr/bin/docker stop %p-%i
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## app-uploader@.service
+
+							```bash
+							[Unit]
+							Description=ZH DZI Uploader Service
+
+							Requires=docker.service
+							Requires=etcd.service
+
+							After=docker.service
+							After=etcd.service
+
+							[Service]
+							EnvironmentFile=/etc/environment
+							User=core
+
+							Restart=always
+							TimeoutStartSec=0
+							ExecStartPre=-/usr/bin/docker kill %p-%i
+							ExecStartPre=-/usr/bin/docker rm %p-%i
+							ExecStartPre=/usr/bin/docker pull kenperkins/zoomhub-importer
+							ExecStart=/usr/bin/docker run --name %p-%i \
+							-e RAX_USERNAME=zoomingservice \
+							-e RAX_PASSWORD=this-is-not-my-password \
+							-e RAX_REGION=IAD \
+							-e ZH_REDIS_PASSWORD=foo-bar-biz-baz-buz \
+							-e ZH_LOG_LEVEL=info \
+							kenperkins/zoomhub-importer /usr/bin/zh-upload-dzis --useInternal --useEtcd
+							ExecStop=/usr/bin/docker stop %p-%i
+							```
+						</script>
+					</section>
+				</section>
+
+				<section>
+					<h2>Demo + fleetctl</h2>
 
 					<p>
-						Quick shout out to
-						<a href="https://www.npmjs.org/package/coreos-cluster-cli">coreos-cluster-cli</a>.
-					</p>
-				</section>
-
-				<section>
-					<h2>Deploy Some Services</h2>
-
-					<p>
-						Redis, Populate, and Stats
-					</p>
-				</section>
-
-				<section>
-					<h2>systemd - app-redis.service</h2>
-
-					<pre>
-[Unit]
-Description=App Redis
-After=docker.service
-Requires=docker.service
-
-[Service]
-EnvironmentFile=/etc/environment
-
-#Disable service timeout
-TimeoutStartSec=0
-Restart=always
-ExecStartPre=-/usr/bin/docker kill %n
-ExecStartPre=-/usr/bin/docker rm %n
-ExecStartPre=/usr/bin/docker pull redis
-ExecStart=/usr/bin/docker run --name %n -p ${COREOS_PRIVATE_IPV4}:6379:6379 redis:latest redis-server --requirepass foo-bar-biz-baz-buz
-ExecStartPost=/bin/bash -c '\
-                while true; do \
-                  /usr/bin/etcdctl set /services/app-redis ${COREOS_PRIVATE_IPV4}:6379 --ttl 10; \
-                  sleep 5; \
-                  done'
-ExecStop=/usr/bin/etcdctl rm /services/app-redis
-ExecStop=/usr/bin/docker stop %n
-
-					</pre>
-				</section>
-
-				<section>
-					<h2>systemd - app-populate.service</h2>
-
-					<pre>
-[Unit]
-Description=ZH Populate Service
-Requires=docker.service
-Requires=etcd.service
-
-After=docker.service
-After=etcd.service
-
-[Service]
-EnvironmentFile=/etc/environment
-User=core
-
-Restart=no
-TimeoutStartSec=0
-ExecStartPre=-/usr/bin/docker kill zh-populate
-ExecStartPre=-/usr/bin/docker rm zh-populate
-ExecStartPre=/usr/bin/docker pull kenperkins/zoomhub-importer
-ExecStart=/usr/bin/docker run --name zh-populate \
-      -e RAX_USERNAME=zoomingservice \
-      -e RAX_PASSWORD=this-is-not-my-password \
-      -e RAX_REGION=IAD \
-      -e ZH_REDIS_PASSWORD=foo-bar-biz-baz-buz \
-      -e ZH_LOG_LEVEL=info \
-      kenperkins/zoomhub-importer /usr/bin/zh-populate-queue --useInternal --useEtcd
-ExecStop=/usr/bin/docker stop zh-populate
-					</pre>
-				</section>
-
-				<section>
-					<h2>systemd - app-importer@.service</h2>
-
-					<pre>
-[Unit]
-Description=ZH Blob Importer Service
-
-Requires=docker.service
-Requires=etcd.service
-
-After=docker.service
-After=etcd.service
-
-[Service]
-EnvironmentFile=/etc/environment
-User=core
-
-Restart=always
-TimeoutStartSec=0
-ExecStartPre=-/usr/bin/docker kill %p-%i
-ExecStartPre=-/usr/bin/docker rm %p-%i
-ExecStartPre=/usr/bin/docker pull kenperkins/zoomhub-importer
-ExecStart=/usr/bin/docker run --name %p-%i \
-      -e RAX_USERNAME=zoomingservice \
-      -e RAX_PASSWORD=this-is-not-my-password \
-      -e RAX_REGION=IAD \
-      -e ZH_REDIS_PASSWORD=foo-bar-biz-baz-buz \
-      -e ZH_LOG_LEVEL=info \
-      kenperkins/zoomhub-importer /usr/bin/zh-import-blobs --useInternal --useEtcd
-ExecStop=/usr/bin/docker stop %p-%i
-					</pre>
-				</section>
-
-
-				<section>
-					<h2>systemd - app-uploader@.service</h2>
-
-					<pre>
-[Unit]
-Description=ZH DZI Uploader Service
-
-Requires=docker.service
-Requires=etcd.service
-
-After=docker.service
-After=etcd.service
-
-[Service]
-EnvironmentFile=/etc/environment
-User=core
-
-Restart=always
-TimeoutStartSec=0
-ExecStartPre=-/usr/bin/docker kill %p-%i
-ExecStartPre=-/usr/bin/docker rm %p-%i
-ExecStartPre=/usr/bin/docker pull kenperkins/zoomhub-importer
-ExecStart=/usr/bin/docker run --name %p-%i \
-      -e RAX_USERNAME=zoomingservice \
-      -e RAX_PASSWORD=this-is-not-my-password \
-      -e RAX_REGION=IAD \
-      -e ZH_REDIS_PASSWORD=foo-bar-biz-baz-buz \
-      -e ZH_LOG_LEVEL=info \
-      kenperkins/zoomhub-importer /usr/bin/zh-upload-dzis --useInternal --useEtcd
-ExecStop=/usr/bin/docker stop %p-%i
-					</pre>
-				</section>
-
-				<section>
-					<h2>systemd - app-stats.service</h2>
-
-					<pre>
-[Unit]
-Description=ZH Stats Service
-
-Requires=docker.service
-Requires=etcd.service
-
-After=docker.service
-After=etcd.service
-
-[Service]
-EnvironmentFile=/etc/environment
-User=core
-
-Restart=always
-TimeoutStartSec=0
-ExecStartPre=-/usr/bin/docker kill zh-stats
-ExecStartPre=-/usr/bin/docker rm zh-stats
-ExecStartPre=/usr/bin/docker pull kenperkins/zoomhub-importer
-ExecStart=/usr/bin/docker run --name zh-stats \
-      -e RAX_USERNAME=zoomingservice \
-      -e RAX_PASSWORD=this-is-not-my-password \
-      -e RAX_REGION=IAD \
-      -e ZH_REDIS_PASSWORD=foo-bar-biz-baz-buz \
-      -e ZH_LOG_LEVEL=info \
-      kenperkins/zoomhub-importer /usr/bin/zh-stats --useInternal --useEtcd
-ExecStop=/usr/bin/docker stop zh-stats
-					</pre>
-				</section>
-
-
-
-				<section>
-					<h2>Go Big</h2>
-
-					<p>
-						Deploy 30 instances of the importer
+						Schedule & Start the services
 					</p>
 				</section>
 
@@ -374,7 +404,7 @@ ExecStop=/usr/bin/docker stop zh-stats
 
 				<section>
 					<h1>Thanks!</h1>
-					<h3>By Ken Perkins</h3>
+					<h4><a href="https://developer.rackspace.com/signup">developer+</a></h4>
 					<p>@kenperkins</p>
 				</section>
 

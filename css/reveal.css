@@ -196,7 +196,7 @@ body {
 	opacity: 1;
 }
 	.reveal .slides section .fragment.highlight-red.visible {
-		color: #ff2c2d
+		color: #e79b27;
 	}
 	.reveal .slides section .fragment.highlight-green.visible {
 		color: #17ff2e;
@@ -206,7 +206,7 @@ body {
 	}
 
 .reveal .slides section .fragment.highlight-current-red.current-fragment {
-	color: #ff2c2d
+	color: #e79b27
 }
 .reveal .slides section .fragment.highlight-current-green.current-fragment {
 	color: #17ff2e;
